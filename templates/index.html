@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% from 'forms.html' import pin_toggle %}
+{% block layout %}
+<div class="layout">
+<aside>
+  <nav aria-label="Списки">
+    {% for key, label in [('pinned', 'Закреплённые'), ('catalog', 'Каталог')] %}
+    <a href="/?view={{ key }}" {% if view == key %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <h2>Папки</h2>
+  <nav aria-label="Папки">
+    {% for item in folders %}
+    <a href="/?view=folder&amp;folder={{ item.id }}" {% if view == 'folder' and folder == item.id %}aria-current="page"{% endif %}>{{ item.name }}</a>
+    {% endfor %}
+  </nav>
+  <form method="post" action="/folders" class="new-folder">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="name" placeholder="Новая папка" aria-label="Название новой папки" maxlength="70" required>
+    <button aria-label="Создать папку">+</button>
+  </form>
+</aside>
+<main>
+  <h1>{{ current.name if view == 'folder' else {'pinned':'Закреплённые', 'catalog':'Каталог'}[view] }}</h1>
+  <div class="controls">
+    <form method="get" action="/" class="inline">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="hidden" name="folder" value="{{ folder }}">
+      <input type="hidden" name="sort" value="{{ sort }}">
+      <input type="hidden" name="direction" value="{{ direction }}">
+      <input type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Название, код или тип" aria-label="Поиск бустеров">
+      <button>Найти</button>
+    </form>
+    {% if view == 'folder' %}
+    <details class="manage">
+      <summary>Настройки папки</summary>
+      <form method="post" action="/folders" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="folder" value="{{ folder }}">
+        <input name="name" value="{{ current.name }}" maxlength="70" aria-label="Название папки" required>
+        <button name="action" value="rename">Переименовать</button>
+        <button class="ghost" name="action" value="delete" formnovalidate>Удалить папку</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% if rows %}
+  <div class="table-frame" tabindex="0" aria-label="Таблица сравнения бустеров">
+    <table>
+      <thead><tr>
+        {% for key, label in sorts.items() %}
+        {% set next_direction = 'asc' if (key == sort and direction == 'desc') or (key != sort and key == 'name') else 'desc' %}
+        <th scope="col"{% if key == sort %} aria-sort="{{ 'ascending' if direction == 'asc' else 'descending' }}"{% endif %}>
+          <a href="/?view={{ view }}&amp;folder={{ folder }}&amp;q={{ q|urlencode }}&amp;sort={{ key }}&amp;direction={{ next_direction }}">{{ label }}{% if key == sort %} {{ '↑' if direction == 'asc' else '↓' }}{% endif %}</a>
+        </th>
+        {% if loop.first %}
+        <th scope="col">Действия</th>
+        {% if view == 'pinned' %}<th scope="col">Папка</th>{% endif %}
+        {% endif %}
+        {% endfor %}
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <th scope="row">
+          <a class="product" href="/booster?path={{ row.path|urlencode }}">{{ row.name }}</a>
+          <span class="sub">{{ row.code }} · {{ row.kind }}</span>
+          {% if row.source_date %}<span class="sub">Цены {{ row.source_date }}</span>
+          {% elif not row.captured_at %}<span class="sub">Данные каталога</span>{% endif %}
+          {% if row.stale %}<span class="sub warning">Проверь свежесть данных</span>{% endif %}
+        </th>
+        <td>{{ pin_toggle(row, csrf, view, folder, q, sort, direction) }}</td>
+        {% if view == 'pinned' %}<td><a class="button ghost" href="/add-to-folder?path={{ row.path|urlencode }}">Добавить в папку</a></td>{% endif %}
+        <td>{{ row.market_price|money }}</td>
+        <td>{{ row.shop_eur|money }}{% if row.shop_amount %}<span class="sub">{{ row.shop_amount }} {{ row.shop_currency }}</span>{% endif %}</td>
+        <td class="standout">{{ row.ev|money }}</td>
+        <td>{{ row.get('median')|money }}</td>
+        <td>{{ row.market_return or '—' }}</td>
+        <td>{{ row.shop_return|percent }}</td>
+        {% for k in ['hit5', 'hit20', 'hit50'] %}<td>{{ row[k] or '—' }}</td>{% endfor %}
+        <td>{{ row.breakeven|percent }}{% if row.breakeven is not none %}<span class="sub">{{ 'магазин' if row.shop_amount else 'рынок' }} · модель</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">EV — ожидаемая стоимость карт. Средний возврат — EV, делённое на цену. Шанс окупить рассчитывается по модели при наличии данных.</p>
+  {% elif q %}
+  <p class="empty">По запросу «{{ q }}» бустеры не найдены.</p>
+  {% elif view == 'catalog' %}
+  <p class="empty">Каталог пока пуст. Выполни синхронизацию на сервере по инструкции.</p>
+  {% elif view == 'pinned' %}
+  <div class="empty"><p>Закрепи бустер в каталоге, чтобы сравнить его здесь.</p><a class="button" href="/?view=catalog">Открыть каталог</a></div>
+  {% elif view == 'folder' %}
+  <p class="empty">Открой «Закреплённые» и нажми «Добавить в папку» у нужного бустера.</p>
+  {% endif %}
+</main>
+</div>
+{% endblock %}

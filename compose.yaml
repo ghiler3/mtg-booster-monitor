@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    environment:
+      BOOSTER_AUTO_FX: "1"
+    ports:
+      - "127.0.0.1:8765:8000"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+volumes:
+  data:

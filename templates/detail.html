@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% from 'forms.html' import pin_toggle, shop_fields %}
+{% block title %}{{ row.name }} · {{ row.kind }}{% endblock %}
+{% macro card(label, value) %}
+<div class="metric"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+{% endmacro %}
+{% block content %}
+<a class="back" href="/">← Закреплённые</a>
+<h1>{{ row.name }}</h1>
+<p class="sub">{{ row.code }} · {{ row.kind }} · <a href="{{ source_url(row.path) }}" target="_blank" rel="noopener noreferrer">Страница источника ↗</a></p>
+{% if row.last_error %}<p class="warning">Последнее обновление не удалось. {{ row.last_error }}</p>{% endif %}
+{% if row.get('source_date') %}<p class="hint">Цены Cardmarket от {{ row.source_date }}. Проверено {{ row.captured_at[:10] }} UTC.</p>
+{% elif row.captured_at %}<p class="hint">Проверено {{ row.captured_at[:10] }} UTC. Дата цен отсутствует.</p>
+{% else %}<p class="hint">Подробные показатели ещё не загружены.</p>{% endif %}
+<dl class="metrics">
+  {{ card('EV', row.ev|money) }}
+  {{ card('Медиана', row.get('median')|money) }}
+  {{ card('Цена рынка', row.market_price|money) }}
+  {{ card('Средний возврат по рынку', row.market_return or '—') }}
+  {{ card('Шанс окупить по рынку · модель', row.breakeven_market|percent) }}
+  {{ card('Доля EV от топ-10', row.get('top10') or '—') }}
+  {{ card('Покрытие ценами по источнику', row.get('coverage') or '—') }}
+  {% for amount, odds in row.get('hit', {}).items() %}
+  {{ card('Шанс карты €' ~ amount ~ '+', odds) }}
+  {% endfor %}
+  {{ card('Разных карт / версий', (row.get('different') or '—') ~ ' / ' ~ (row.get('versions') or '—')) }}
+  {{ card('Карт в паке / паков в боксе', (row.get('cards_per_pack') or '—') ~ ' / ' ~ (row.get('packs_per_box') or '—')) }}
+</dl>
+<div class="panels">
+<section class="panel">
+  <h2>Цена магазина</h2>
+  <form method="post" action="/price" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="path" value="{{ row.path }}">
+    {{ shop_fields(row, currencies) }}
+    <div class="inline">
+      <button name="action" value="save">Сохранить цену</button>
+      {% if row.shop_amount %}<button class="ghost" name="action" value="clear" formnovalidate>Очистить</button>{% endif %}
+    </div>
+  </form>
+  {% if row.shop_amount and row.rate is none %}<p class="warning">{% if row.shop_currency == 'RUB' %}Курс RUB ещё не получен. Сервер загрузит его автоматически.{% else %}Курс {{ row.shop_currency }} отсутствует. Можно ввести его вручную.{% endif %}</p>{% endif %}
+  {% if row.rate is not none and row.shop_currency != 'EUR' %}
+  <p class="hint">1 EUR = {{ row.rate }} {{ row.shop_currency }} · {{ row.rate_source }}{% if row.rate_date %} от {{ row.rate_date }}{% endif %}</p>
+  {% endif %}
+  <dl class="metrics small">
+    {{ card('Цена в евро', row.shop_eur|money) }}
+    {{ card('Средний возврат', row.shop_return|percent) }}
+    {{ card('Шанс окупить · модель', row.breakeven_shop|percent) }}
+  </dl>
+</section>
+<section class="panel">
+  <h2>Закрепление и папки</h2>
+  <div class="inline">
+    {{ pin_toggle(row, csrf, 'detail') }}
+    <a class="button ghost" href="/add-to-folder?path={{ row.path|urlencode }}&amp;back=detail">Добавить в папку</a>
+  </div>
+  {% for folder in folders if folder.id in membership %}
+  <form method="post" action="/membership" class="folder-row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="path" value="{{ row.path }}">
+    <input type="hidden" name="folder" value="{{ folder.id }}">
+    <a href="/?view=folder&amp;folder={{ folder.id }}">{{ folder.name }}</a>
+    <button class="ghost" name="action" value="remove">Убрать из папки</button>
+  </form>
+  {% endfor %}
+</section>
+</div>
+<section>
+  <h2>Вероятности отдельных карт</h2>
+  {% if model %}
+  <p class="hint">Модель MTGJSON <code>{{ model.model_key }}</code>. Симуляций {{ model.size }}. Цена есть у {{ model.priced }} из {{ model.cards|length }} версий. Расчёт {{ row.modeled_at[:10] }} UTC.</p>
+  <form method="get" action="/booster" class="inline controls">
+    <input type="hidden" name="path" value="{{ row.path }}">
+    <input name="card_q" type="search" value="{{ card_q }}" maxlength="100" placeholder="Название карты" aria-label="Поиск карт">
+    <button>Найти</button>
+  </form>
+  <div class="table-frame">
+    <table>
+      <thead><tr><th>Карта</th><th>Версия</th><th>Цена</th><th>Шанс в паке</th></tr></thead>
+      <tbody>{% for card in cards %}
+        <tr><td>{{ card.name }}</td><td>{{ card.code }} #{{ card.number }}{{ ' · Foil' if card.foil else '' }}</td>
+          <td>{{ (card.cents / 100 if card.cents is not none else none)|money }}</td>
+          <td>{{ '%.4g'|format(card.probability) }}%</td></tr>
+      {% else %}<tr><td colspan="4">Карты не найдены.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% if pages > 1 %}
+  <nav aria-label="Страницы списка карт" class="pagination">
+    {% if page > 1 %}<a href="/booster?path={{ row.path|urlencode }}&amp;card_q={{ card_q|urlencode }}&amp;page={{ page - 1 }}">← Назад</a>{% endif %}
+    <span>{{ page }} / {{ pages }}</span>
+    {% if page < pages %}<a href="/booster?path={{ row.path|urlencode }}&amp;card_q={{ card_q|urlencode }}&amp;page={{ page + 1 }}">Вперёд →</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% else %}
+  <p class="hint">Загрузи модель для этого бустера через команду из инструкции. Оригинальные шансы можно посмотреть на странице TCG Balance.</p>
+  {% endif %}
+</section>
+{% endblock %}

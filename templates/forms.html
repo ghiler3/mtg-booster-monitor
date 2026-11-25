@@ -1,0 +1,26 @@
+{% macro pin_toggle(row, csrf, view, folder=0, q='', sort='name', direction='asc') %}
+<form method="post" action="/collection">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="path" value="{{ row.path }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <input type="hidden" name="folder" value="{{ folder }}">
+  <input type="hidden" name="q" value="{{ q }}">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="direction" value="{{ direction }}">
+  <button class="pin-toggle{% if not row.pinned %} ghost{% endif %}" aria-pressed="{{ 'true' if row.pinned else 'false' }}"
+          title="{{ 'Открепить' if row.pinned else 'Закрепить' }}" name="action" value="{{ 'unpin' if row.pinned else 'pin' }}">
+    {{ 'Закреплён' if row.pinned else 'Не закреплён' }}
+  </button>
+</form>
+{% endmacro %}
+
+{% macro shop_fields(row, currencies, optional=false) %}
+<label>Сумма <input name="amount" inputmode="decimal" value="{{ row.shop_amount or '' }}" placeholder="6,50" {% if not optional %}required{% endif %}></label>
+<label>Валюта <input name="currency" list="currencies" value="{{ row.shop_currency or 'EUR' }}" maxlength="3" {% if not optional %}required{% endif %}></label>
+<datalist id="currencies">{% for code in currencies %}<option value="{{ code }}">{% endfor %}</datalist>
+<details>
+  <summary>Ручной курс</summary>
+  <label>Единиц валюты за 1 EUR <input name="manual_fx" inputmode="decimal" value="{{ row.manual_fx or '' }}" placeholder="Необязательно"></label>
+  <p class="hint">Для RUB используется курс Банка России. Ручной курс RUB применяется, если автоматического курса ещё нет.</p>
+</details>
+{% endmacro %}
